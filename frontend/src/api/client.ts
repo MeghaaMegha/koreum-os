@@ -1,0 +1,79 @@
+import axios from "axios";
+
+const API_BASE = "/api/v1";
+
+const client = axios.create({
+  baseURL: API_BASE,
+  headers: { "Content-Type": "application/json" },
+});
+
+// Attach JWT to every request
+client.interceptors.request.use((config) => {
+  const token = localStorage.getItem("koreum_access_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, clear tokens and redirect to login
+client.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("koreum_access_token");
+      localStorage.removeItem("koreum_refresh_token");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
+export interface MeResponse {
+  id: string;
+  email: string;
+  full_name: string;
+  tenant_id: string;
+  roles: string[];
+  permissions: string[];
+  is_active: boolean;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  roles: { id: string; name: string; permissions: string[] }[];
+  created_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+  actor_user_id: string | null;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export const api = {
+  login: (email: string, password: string) =>
+    client.post("/auth/login", "email=" + encodeURIComponent(email) + "&password=" + encodeURIComponent(password), {
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    }),
+  me: () => client.get<MeResponse>("/auth/me"),
+  listUsers: () => client.get<User[]>("/users"),
+  listAudit: () => client.get<{ items: AuditEvent[]; total: number }>("/audit?limit=100"),
+  listTenants: () => client.get<Tenant[]>("/tenants"),
+  health: () => client.get("/health"),
+};
+
+export default client;
