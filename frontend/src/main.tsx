@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
 import Tenants from "./pages/Tenants";
 import AuditLogs from "./pages/AuditLogs";
+import Vault from "./pages/Vault";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -32,6 +33,7 @@ function AppRoutes() {
         <Route path="users" element={<Users />} />
         <Route path="tenants" element={<Tenants />} />
         <Route path="audit" element={<AuditLogs />} />
+        <Route path="vault" element={<Vault />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

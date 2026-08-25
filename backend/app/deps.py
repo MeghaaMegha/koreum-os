@@ -94,6 +94,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "agents:read", "agents:write", "agents:execute",
         "workflows:read", "workflows:write", "workflows:execute",
         "audit:read", "policies:read", "policies:write",
+        "vault:read", "vault:write", "vault:delete",
     ],
     "PLATFORM_ADMIN": [
         "tenants:read", "tenants:write", "users:read", "audit:read",

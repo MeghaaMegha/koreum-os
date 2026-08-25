@@ -6,6 +6,7 @@ const navItems = [
   { to: "/users", label: "Users", icon: "◯" },
   { to: "/tenants", label: "Tenants", icon: "▣" },
   { to: "/audit", label: "Audit Logs", icon: "≡" },
+  { to: "/vault", label: "Vault", icon: "◈" },
 ];
 
 export default function Layout() {
