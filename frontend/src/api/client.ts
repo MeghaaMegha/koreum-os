@@ -70,7 +70,9 @@ export const api = {
       headers: {"Content-Type": "application/x-www-form-urlencoded"},
     }),
   me: () => client.get<MeResponse>("/auth/me"),
-  listUsers: () => client.get<User[]>("/users"),
+    listUsers: () => client.get<User[]>("/users"),
+  createUser: (data: { email: string; full_name: string; password: string; role_names: string[] }) =>
+    client.post<User>("/users", data),
   listAudit: () => client.get<{ items: AuditEvent[]; total: number }>("/audit?limit=100"),
   listTenants: () => client.get<Tenant[]>("/tenants"),
   health: () => client.get("/health"),
