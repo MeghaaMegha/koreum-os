@@ -17,7 +17,7 @@ class RoleOut(BaseModel):
 
 
 class UserBase(BaseModel):
-    email: EmailStr
+    email: str
     full_name: str = Field(..., min_length=1, max_length=255)
 
 
