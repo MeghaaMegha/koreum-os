@@ -95,6 +95,13 @@ export default function Users() {
       .catch((err) => alert(err.response?.data?.detail || "Failed to deactivate user"));
   };
 
+  const handleActivate = (user: User) => {
+    api
+      .updateUser(user.id, { is_active: true })
+      .then(() => loadUsers())
+      .catch((err) => alert(err.response?.data?.detail || "Failed to activate user"));
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -293,12 +300,19 @@ export default function Users() {
                       >
                         Edit
                       </button>
-                      {u.is_active && (
+                      {u.is_active ? (
                         <button
                           onClick={() => handleDeactivate(u)}
                           className="text-xs px-3 py-1 text-red-500 border border-red-200 rounded hover:bg-red-50 transition"
                         >
                           Deactivate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleActivate(u)}
+                          className="text-xs px-3 py-1 text-emerald-600 border border-emerald-200 rounded hover:bg-emerald-50 transition"
+                        >
+                          Activate
                         </button>
                       )}
                     </div>
