@@ -2,12 +2,13 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String, Table, Column
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, ForeignKey, String, Table, Column, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import UUIDPK, TimestampMixin
+from app.models.types import GUID
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
@@ -18,8 +19,8 @@ if TYPE_CHECKING:
 user_role = Table(
     "user_roles",
     Base.metadata,
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", GUID(), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", GUID(), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
 )
 
 
@@ -27,10 +28,10 @@ class Role(UUIDPK, TimestampMixin):
     __tablename__ = "roles"
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+        GUID(), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    permissions: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    permissions: Mapped[list[str]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=list, nullable=False)
 
     tenant: Mapped["Tenant"] = relationship(back_populates="roles")
     users: Mapped[list["User"]] = relationship(secondary=user_role, back_populates="roles")
@@ -43,7 +44,7 @@ class User(UUIDPK, TimestampMixin):
     __tablename__ = "users"
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+        GUID(), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)

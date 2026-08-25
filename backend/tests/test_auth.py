@@ -17,7 +17,11 @@ from app.security import hash_password
 pytestmark = pytest.mark.asyncio
 
 ROLE_PERMS = {
-    "ADMIN": ["users:read", "users:write", "users:delete", "audit:read"],
+    "ADMIN": [
+        "users:read", "users:write", "users:delete",
+        "tenants:read", "tenants:write",
+        "audit:read",
+    ],
     "USER": ["agents:read"],
 }
 
@@ -27,9 +31,17 @@ async def seed_user(db_session, email="admin@koreum.local", role_name="ADMIN"):
     db_session.add(tenant)
     await db_session.flush()
 
-    role = Role(tenant_id=tenant.id, name=role_name, permissions=ROLE_PERMS[role_name])
-    db_session.add(role)
+    # Seed ALL roles so create_user with any role works
+    for rname, perms in ROLE_PERMS.items():
+        role = Role(tenant_id=tenant.id, name=rname, permissions=perms)
+        db_session.add(role)
     await db_session.flush()
+
+    # Find the requested role
+    result = await db_session.execute(
+        select(Role).where(Role.tenant_id == tenant.id, Role.name == role_name)
+    )
+    user_role = result.scalar_one()
 
     user = User(
         tenant_id=tenant.id,
@@ -37,7 +49,7 @@ async def seed_user(db_session, email="admin@koreum.local", role_name="ADMIN"):
         hashed_password=hash_password("Admin123!"),
         full_name="Test Admin",
         is_active=True,
-        roles=[role],
+        roles=[user_role],
     )
     db_session.add(user)
     await db_session.commit()
@@ -47,7 +59,8 @@ async def seed_user(db_session, email="admin@koreum.local", role_name="ADMIN"):
 
 async def login(client, email="admin@koreum.local", password="Admin123!"):
     r = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
+        "/api/v1/auth/login",
+        data={"email": email, "password": password},
     )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
@@ -62,7 +75,7 @@ async def test_login_success(client, db_session):
 async def test_login_invalid_password(client, db_session):
     await seed_user(db_session)
     r = await client.post(
-        "/api/v1/auth/login", json={"email": "admin@koreum.local", "password": "wrong"}
+        "/api/v1/auth/login", data={"email": "admin@koreum.local", "password": "wrong"}
     )
     assert r.status_code == 401
 
@@ -93,7 +106,7 @@ async def test_rbac_user_cannot_list_users(client, db_session):
 async def test_refresh_token(client, db_session):
     await seed_user(db_session)
     r = await client.post(
-        "/api/v1/auth/login", json={"email": "admin@koreum.local", "password": "Admin123!"}
+        "/api/v1/auth/login", data={"email": "admin@koreum.local", "password": "Admin123!"}
     )
     refresh = r.json()["refresh_token"]
     r2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
