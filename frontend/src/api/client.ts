@@ -73,6 +73,10 @@ export const api = {
     listUsers: () => client.get<User[]>("/users"),
   createUser: (data: { email: string; full_name: string; password: string; role_names: string[] }) =>
     client.post<User>("/users", data),
+  updateUser: (userId: string, data: { email?: string; full_name?: string; is_active?: boolean; role_names?: string[] }) =>
+    client.patch<User>(`/users/${userId}`, data),
+  deactivateUser: (userId: string) =>
+    client.delete(`/users/${userId}`),
   listAudit: () => client.get<{ items: AuditEvent[]; total: number }>("/audit?limit=100"),
   listTenants: () => client.get<Tenant[]>("/tenants"),
   health: () => client.get("/health"),
