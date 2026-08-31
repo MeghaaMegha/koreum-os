@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.models.base import UUIDPK, TimestampMixin
 from app.models.types import GUID
+from pgvector.sqlalchemy import Vector
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
@@ -53,9 +54,7 @@ class DocumentChunk(UUIDPK, TimestampMixin):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(
-        JSON().with_variant(JSONB, "postgresql"), nullable=True
-    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
