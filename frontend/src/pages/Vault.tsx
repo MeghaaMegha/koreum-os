@@ -1,66 +1,77 @@
-import { useEffect, useState } from "react";
-import { api, Document } from "../api/client";
+import { useEffect, useState, useRef } from "react";
+import { api } from "../api/client";
+import type { Document, SearchHit } from "../api/client";
 
 export default function Vault() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showUpload, setShowUpload] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ document_title: string; content: string; document_id: string }[]>([]);
+  const [searchMode, setSearchMode] = useState("hybrid");
+  const [searchResults, setSearchResults] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [confidence, setConfidence] = useState<number | null>(null);
+  const [evidence, setEvidence] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadDocs = () => {
-    setLoading(true);
-    api
-      .listDocuments()
-      .then((res) => setDocuments(res.data))
-      .catch((e) => setError(e.response?.data?.detail || "Failed to load documents"))
-      .finally(() => setLoading(false));
+  const fetchDocuments = async () => {
+    try {
+      const res = await api.listDocuments();
+      setDocuments(res.data);
+    } catch (err) {
+      console.error("Failed to fetch documents", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadDocs();
+    fetchDocuments();
   }, []);
 
-  const handleUpload = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!uploadFile) return;
-    setUploadError("");
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setUploading(true);
-    api
-      .uploadDocument(uploadFile, uploadTitle || uploadFile.name)
-      .then(() => {
-        setShowUpload(false);
-        setUploadFile(null);
-        setUploadTitle("");
-        loadDocs();
-      })
-      .catch((err) => setUploadError(err.response?.data?.detail || "Failed to upload"))
-      .finally(() => setUploading(false));
+    try {
+      await api.uploadDocument(file, file.name);
+      await fetchDocuments();
+    } catch (err) {
+      console.error("Upload failed", err);
+      alert("Upload failed. Check file type (TXT, MD, CSV, PDF, DOCX).");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
-  const handleDelete = (doc: Document) => {
-    if (!confirm(`Delete "${doc.title}"?`)) return;
-    api
-      .deleteDocument(doc.id)
-      .then(() => loadDocs())
-      .catch((err) => alert(err.response?.data?.detail || "Failed to delete"));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this document?")) return;
+    try {
+      await api.deleteDocument(id);
+      await fetchDocuments();
+    } catch (err) {
+      console.error("Delete failed", err);
+    }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
-    api
-      .searchDocuments(searchQuery)
-      .then((res) => setSearchResults(res.data.hits))
-      .catch(() => setSearchResults([]))
-      .finally(() => setSearching(false));
+    setSearchResults(null);
+    setConfidence(null);
+    setEvidence([]);
+    try {
+      const res = await api.searchDocuments(searchQuery, searchMode);
+      setSearchResults(res.data.hits);
+      setConfidence(res.data.confidence);
+      setEvidence(res.data.evidence || []);
+    } catch (err) {
+      console.error("Search failed", err);
+      alert("Search failed. Try again.");
+    } finally {
+      setSearching(false);
+    }
   };
 
   const formatSize = (bytes: number) => {
@@ -69,137 +80,167 @@ export default function Vault() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const getConfidenceLabel = (score: number) => {
+    if (score >= 0.8) return { label: "High", color: "text-emerald-600" };
+    if (score >= 0.6) return { label: "Medium", color: "text-amber-600" };
+    return { label: "Low", color: "text-slate-500" };
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Vault</h1>
-          <p className="text-sm text-slate-500">Knowledge base documents</p>
+          <h1 className="text-2xl font-bold text-slate-800">Vault</h1>
+          <p className="text-sm text-slate-500 mt-1">Knowledge base documents</p>
         </div>
         <button
-          onClick={() => setShowUpload(!showUpload)}
-          className="px-4 py-2 bg-koreum-500 text-white text-sm font-medium rounded-lg hover:bg-koreum-600 transition"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {showUpload ? "Cancel" : "+ Upload Document"}
+          {uploading ? "Uploading..." : "+ Upload Document"}
         </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleUpload}
+          accept=".txt,.md,.csv,.pdf,.docx"
+          className="hidden"
+        />
       </div>
 
-      {showUpload && (
-        <form onSubmit={handleUpload} className="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Upload Document</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">Title</label>
-              <input
-                type="text"
-                value={uploadTitle}
-                onChange={(e) => setUploadTitle(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-koreum-500"
-                placeholder="Document title (optional)"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">File</label>
-              <input
-                type="file"
-                required
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                className="w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-koreum-50 file:text-koreum-700 hover:file:bg-koreum-100"
-                accept=".txt,.md,.csv,.pdf,.docx"
-              />
-              <p className="text-xs text-slate-400 mt-1">Supported: TXT, MD, CSV, PDF, DOCX (max 25MB)</p>
-            </div>
-          </div>
-          {uploadError && <p className="text-red-500 text-sm mt-3">{uploadError}</p>}
-          <button
-            type="submit"
-            disabled={uploading || !uploadFile}
-            className="mt-4 px-5 py-2 bg-koreum-500 text-white text-sm font-medium rounded-lg hover:bg-koreum-600 disabled:opacity-50 transition"
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="Search documents..."
+            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <select
+            value={searchMode}
+            onChange={(e) => setSearchMode(e.target.value)}
+            className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {uploading ? "Uploading..." : "Upload"}
+            <option value="hybrid">Hybrid</option>
+            <option value="vector">Vector</option>
+            <option value="keyword">Keyword</option>
+          </select>
+          <button
+            onClick={handleSearch}
+            disabled={searching}
+            className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {searching ? "Searching..." : "Search"}
           </button>
-        </form>
-      )}
+        </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6 mb-6">
-        <form onSubmit={handleSearch}>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-koreum-500"
-              placeholder="Search documents..."
-            />
-            <button
-              type="submit"
-              disabled={searching}
-              className="px-4 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 disabled:opacity-50 transition"
-            >
-              {searching ? "Searching..." : "Search"}
-            </button>
-          </div>
-        </form>
-        {searchResults.length > 0 && (
-          <div className="mt-4 space-y-3">
-            {searchResults.map((hit, i) => (
-              <div key={i} className="border border-slate-200 rounded-lg p-3">
-                <p className="text-sm font-medium text-slate-800">{hit.document_title}</p>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{hit.content}</p>
-              </div>
-            ))}
+        {/* Confidence + Evidence */}
+        {confidence !== null && searchResults && (
+          <div className="flex items-center gap-4 text-xs flex-wrap">
+            <span className="text-slate-500">
+              Results: {searchResults.length}
+            </span>
+            <span className={`font-medium ${getConfidenceLabel(confidence).color}`}>
+              Confidence: {getConfidenceLabel(confidence).label} ({(confidence * 100).toFixed(1)}%)
+            </span>
+            {evidence.length > 0 && (
+              <span className="text-slate-500">
+                Sources: {evidence.map((e) => e.document_title).join(", ")}
+              </span>
+            )}
           </div>
         )}
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      {/* Search Results */}
+      {searchResults && searchResults.length > 0 && (
+        <div className="space-y-3 mb-6">
+          {searchResults.map((hit) => (
+            <div
+              key={hit.chunk_id}
+              className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-slate-700">
+                  {hit.document_title}
+                </span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
+                    {hit.search_type}
+                  </span>
+                  <span className="text-slate-500">
+                    Score: {hit.score.toFixed(4)}
+                  </span>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 line-clamp-3">{hit.content}</p>
+              <p className="text-xs text-slate-400 mt-2">
+                Source: {hit.source_citation}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Document Table */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Title</th>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Filename</th>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Type</th>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Size</th>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Status</th>
-              <th className="text-left px-5 py-3 font-medium text-slate-600">Actions</th>
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Title</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Filename</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Type</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Size</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && (
+          <tbody>
+            {loading ? (
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-slate-400">Loading…</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  Loading documents...
+                </td>
               </tr>
-            )}
-            {error && (
+            ) : documents.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-red-500">{error}</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  No documents uploaded yet.
+                </td>
               </tr>
-            )}
-            {!loading && documents.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-slate-400">No documents uploaded yet</td>
-              </tr>
-            )}
-            {!loading &&
+            ) : (
               documents.map((doc) => (
-                <tr key={doc.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-3 text-slate-800">{doc.title}</td>
-                  <td className="px-5 py-3 text-slate-600">{doc.filename}</td>
-                  <td className="px-5 py-3 text-slate-600">{doc.content_type}</td>
-                  <td className="px-5 py-3 text-slate-600">{formatSize(doc.file_size)}</td>
-                  <td className="px-5 py-3">
-                    <span className="text-xs px-2 py-0.5 rounded bg-koreum-50 text-koreum-700">{doc.status}</span>
+                <tr key={doc.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-3 text-slate-700">{doc.title}</td>
+                  <td className="px-4 py-3 text-slate-500">{doc.filename}</td>
+                  <td className="px-4 py-3 text-slate-500">{doc.content_type}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatSize(doc.file_size)}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`px-2 py-0.5 text-xs rounded ${
+                        doc.status === "indexed"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {doc.status}
+                    </span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-4 py-3">
                     <button
-                      onClick={() => handleDelete(doc)}
-                      className="text-xs px-3 py-1 text-red-500 border border-red-200 rounded hover:bg-red-50 transition"
+                      onClick={() => handleDelete(doc.id)}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium"
                     >
                       Delete
                     </button>
                   </td>
                 </tr>
-              ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

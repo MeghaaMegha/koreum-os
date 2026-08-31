@@ -74,7 +74,12 @@ export interface Document {
   file_size: number;
   status: string;
   created_at: string;
+  updated_at: string | null;
   metadata_: Record<string, unknown> | null;
+  collection_id: string | null;
+  version: number;
+  parent_document_id: string | null;
+  lifecycle_state: string;
 }
 
 export interface SearchHit {
@@ -84,12 +89,31 @@ export interface SearchHit {
   content: string;
   chunk_index: number;
   score: number;
+  search_type: string;
+  source_citation: string;
 }
 
 export interface SearchResponse {
   query: string;
   total: number;
   hits: SearchHit[];
+  confidence: number;
+  evidence: {
+    document_id: string;
+    document_title: string;
+    source_citation: string;
+    score: number;
+    chunk_count: number;
+  }[];
+}
+
+export interface Collection {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  document_count: number;
 }
 
 export const api = {
@@ -119,8 +143,28 @@ export const api = {
     });
   },
   deleteDocument: (id: string) => client.delete(`/vault/documents/${id}`),
-  searchDocuments: (query: string) =>
-    client.post<SearchResponse>("/vault/documents/search", null, { params: { query } }),
+  searchDocuments: (query: string, mode: string = "hybrid") =>
+    client.post<SearchResponse>("/vault/documents/search", null, { params: { query, mode } }),
+
+  // Vault Collections
+  listCollections: () => client.get<Collection[]>("/vault/documents/collections/all"),
+  createCollection: (name: string, description?: string) =>
+    client.post<Collection>("/vault/documents/collections", null, { params: { name, description } }),
+
+  // Vault Lifecycle
+  updateLifecycle: (id: string, state: string) =>
+    client.put<Document>(`/vault/documents/${id}/lifecycle`, null, { params: { state } }),
+
+  // Vault Versioning
+  createVersion: (id: string, file: File, title?: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (title) formData.append("title", title);
+    return client.post<Document>(`/vault/documents/${id}/version`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
+export { client };
 export default client;
